@@ -89,15 +89,19 @@ class PbxprojTarget(object):
 		if self._configuration_list_guid is None:
 			project_data = project.get_project_data()
 
-			result = re.search('[A-Z0-9]+ \/\* '+re.escape(self._name)+' \*\/ = {\n[ \t]+isa = PBXNativeTarget;(?:.|\n)+?buildConfigurationList = ([A-Z0-9]+) \/\* Build configuration list for PBXNativeTarget "'+re.escape(self._name)+'" \*\/;',
-			                   project_data)
-
-			if result:
+			if result := re.search(
+				'[A-Z0-9]+ \/\* '
+				+ re.escape(self._name)
+				+ ' \*\/ = {\n[ \t]+isa = PBXNativeTarget;(?:.|\n)+?buildConfigurationList = ([A-Z0-9]+) \/\* Build configuration list for PBXNativeTarget "'
+				+ re.escape(self._name)
+				+ '" \*\/;',
+				project_data,
+			):
 				(self._configuration_list_guid, ) = result.groups()
 			else:
 				# False indicates that we could not find a configuration list GUID.
 				self._configuration_list_guid = False
-		
+
 		return self._configuration_list_guid
 
 
@@ -182,14 +186,14 @@ class PbxprojTarget(object):
 
 			result = re.search(re.escape(self.guid())+' \/\* '+re.escape(self._name)+' \*\/ = {\n[ \t]+isa = PBXNativeTarget;(?:.|\n)+?dependencies = \(\n((?:[ \t]+[A-Z0-9]+ \/\* PBXTargetDependency \*\/,\n)*)[ \t]*\);\n',
 			                   project_data)
-	
+
 			if not result:
-				logging.error("Unable to get dependencies from: "+self._project.path())
+				logging.error(f"Unable to get dependencies from: {self._project.path()}")
 				return False
-	
+
 			(dependency_set, ) = result.groups()
 			self._dependency_guids = re.findall('[ \t]+([A-Z0-9]+) \/\* PBXTargetDependency \*\/,\n', dependency_set)
-		
+
 		return self._dependency_guids
 
 
@@ -199,69 +203,69 @@ class PbxprojTarget(object):
 			dependency_names = []
 
 			for guid in self.dependency_guids():
-				result = re.search(guid+' \/\* PBXTargetDependency \*\/ = \{\n[ \t]+isa = PBXTargetDependency;\n[ \t]*name = (["a-zA-Z0-9\.\-]+);',
-				                   project_data)
-
-				if result:
+				if result := re.search(
+					guid
+					+ ' \/\* PBXTargetDependency \*\/ = \{\n[ \t]+isa = PBXTargetDependency;\n[ \t]*name = (["a-zA-Z0-9\.\-]+);',
+					project_data,
+				):
 					(dependency_name, ) = result.groups()
 					dependency_names.append(dependency_name)
 
 			self._dependency_names = dependency_names
-		
+
 		return self._dependency_names
 
 	def dependency_paths(self):
 		if self._dependency_paths:
 			return self._dependency_paths
 
-		dependency_guids = self.dependency_guids()
-		if dependency_guids:
+		if dependency_guids := self.dependency_guids():
 			project_data = self._project.get_project_data()
-			
+
 			target_proxy_guids = []
-			
+
 			for guid in dependency_guids:
-				result = re.search(guid+' \/\* PBXTargetDependency \*\/ = \{\n(?:.|\n)+?targetProxy = ([A-Z0-9]+) \/\* PBXContainerItemProxy \*\/;',
-				                   project_data)
-				
-				if result:
+				if result := re.search(
+					guid
+					+ ' \/\* PBXTargetDependency \*\/ = \{\n(?:.|\n)+?targetProxy = ([A-Z0-9]+) \/\* PBXContainerItemProxy \*\/;',
+					project_data,
+				):
 					(target_proxy_guid, ) = result.groups()
 					target_proxy_guids.append(target_proxy_guid)
 
 			container_portal_guids = []
 			remote_guids = []
-			
+
 			for guid in target_proxy_guids:
-				result = re.search(guid+' \/\* PBXContainerItemProxy \*\/ = \{\n(?:.|\n)+?containerPortal = ([A-Z0-9]+) \/\* .+? \*\/;(?:.|\n)+?remoteGlobalIDString = ([A-Z0-9]+)',
-				                   project_data)
-				
-				if result:
+				if result := re.search(
+					guid
+					+ ' \/\* PBXContainerItemProxy \*\/ = \{\n(?:.|\n)+?containerPortal = ([A-Z0-9]+) \/\* .+? \*\/;(?:.|\n)+?remoteGlobalIDString = ([A-Z0-9]+)',
+					project_data,
+				):
 					(container_portal_guid, remote_guid, ) = result.groups()
 					container_portal_guids.append(container_portal_guid)
 					remote_guids.append(remote_guid)
 
 			dependency_paths = []
 
-			index = 0
-			for guid in container_portal_guids:
-				result = re.search(guid+' \/\* .+? \*\/ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = .+?; path = (.+?); sourceTree = .+?; };',
-				                   project_data)
-				
-				if result:
+			for index, guid in enumerate(container_portal_guids):
+				if result := re.search(
+					guid
+					+ ' \/\* .+? \*\/ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = .+?; path = (.+?); sourceTree = .+?; };',
+					project_data,
+				):
 					(dependency_path, ) = result.groups()
-					dependency_path = dependency_path + ":" + remote_guids[index]
+					dependency_path = f"{dependency_path}:{remote_guids[index]}"
 					dependency_paths.append(dependency_path)
 				else:
-					logging.error("Unable to find the path for GUID: "+guid)
-				
-				index += 1
+					logging.error(f"Unable to find the path for GUID: {guid}")
 
 			if len(dependency_paths) != len(container_portal_guids):
 				logging.error("Unable to load all dependency information from the project.")
 				return False
 
 			self._dependency_paths = dependency_paths
-			
+
 		elif dependency_guids is not None and dependency_guids is not False and len(dependency_guids) == 0:
 			self._dependency_paths = []
 
@@ -275,11 +279,11 @@ class PbxprojTarget(object):
 		                   project_data)
 
 		if not result:
-			logging.error("Unable to get product guid from: "+self.path())
+			logging.error(f"Unable to get product guid from: {self.path()}")
 			return False
 
 		(self._product_guid, self._product_name, ) = result.groups()
-		
+
 		return True
 
 
@@ -344,7 +348,7 @@ class pbxproj(object):
 		return self._is_loaded
 
 	def uniqueid_for_target(self, target):
-		return self._path + ':' + target
+		return f'{self._path}:{target}'
 
 	def path(self):
 		return self._path
@@ -368,9 +372,11 @@ class pbxproj(object):
 			result = re.search('\tobjectVersion = ([0-9]+);', project_data)
 
 			if not result:
-				logging.error("Can't recover: unable to find the project version for your target at: "+self.path())
+				logging.error(
+					f"Can't recover: unable to find the project version for your target at: {self.path()}"
+				)
 				return False
-	
+
 			(self._file_format_version,) = result.groups()
 			self._file_format_version = int(self._file_format_version)
 
@@ -407,9 +413,9 @@ class pbxproj(object):
 	def set_project_data(self, project_data, flush=False):
 		if self._project_data != project_data or flush:
 			self._project_data = project_data
-			if flush:
-				project_file = open(self.path(), 'w')
-				project_file.write(self._project_data)
+		if flush:
+			project_file = open(self.path(), 'w')
+			project_file.write(self._project_data)
 
 	def _load_from_disk(self):
 		project_data = self.get_project_data()
@@ -476,22 +482,23 @@ class pbxproj(object):
 		(subtext, ) = match.groups()
 
 		buildfile_hash = None
-		
-		match = re.search('([A-Z0-9]+).+?fileRef = '+re.escape(file_ref_hash), subtext)
-		if match:
+
+		if match := re.search(
+			f'([A-Z0-9]+).+?fileRef = {re.escape(file_ref_hash)}', subtext
+		):
 			(buildfile_hash, ) = match.groups()
-			logging.info("This build file already exists: "+buildfile_hash)
-		
+			logging.info(f"This build file already exists: {buildfile_hash}")
+
 		if buildfile_hash is None:
 			match = re.search('\/\* Begin PBXBuildFile section \*\/\n', project_data)
 
 			buildfile_hash = default_guid
-		
+
 			libfiletext = "\t\t"+buildfile_hash+" /* "+name+" in Frameworks */ = {isa = PBXBuildFile; fileRef = "+file_ref_hash+" /* "+name+" */; };\n"
 			project_data = project_data[:match.end()] + libfiletext + project_data[match.end():]
-		
+
 		self.set_project_data(project_data)
-		
+
 		return buildfile_hash
 
 	# Add a line to the PBXFileReference section.
@@ -542,18 +549,17 @@ class pbxproj(object):
 
 		match = re.search('\/\* '+re.escape(group)+' \*\/ = \{\n[ \t]+isa = PBXGroup;\n[ \t]+children = \(\n((?:.|\n)+?)\);', project_data)
 		if not match:
-			logging.error("Couldn't find the "+group+" children.")
+			logging.error(f"Couldn't find the {group} children.")
 			return False
 
 		(children,) = match.groups()
-		match = re.search(re.escape(guid), children)
-		if match:
-			logging.info("This file is already a member of the "+name+" group.")
+		if match := re.search(re.escape(guid), children):
+			logging.info(f"This file is already a member of the {name} group.")
 		else:
 			match = re.search('\/\* '+re.escape(group)+' \*\/ = \{\n[ \t]+isa = PBXGroup;\n[ \t]+children = \(\n', project_data)
 
 			if not match:
-				logging.error("Couldn't find the "+group+" group.")
+				logging.error(f"Couldn't find the {group} group.")
 				return False
 
 			pbxgroup = "\t\t\t\t"+guid+" /* "+name+" */,\n"
@@ -573,11 +579,15 @@ class pbxproj(object):
 	#
 	# <guid> /* <name> */,
 	def add_file_to_resources(self, name, guid):
-		match = re.search('\/\* '+re.escape('Resources')+' \*\/ = \{\n[ \t]+isa = PBXGroup;\n[ \t]+children = \(\n((?:.|\n)+?)\);', self.get_project_data())
-		if not match:
+		if match := re.search(
+			'\/\* '
+			+ re.escape('Resources')
+			+ ' \*\/ = \{\n[ \t]+isa = PBXGroup;\n[ \t]+children = \(\n((?:.|\n)+?)\);',
+			self.get_project_data(),
+		):
+			return self.add_file_to_group(name, guid, 'Resources')
+		else:
 			return self.add_file_to_group(name, guid, 'Supporting Files')
-
-		return self.add_file_to_group(name, guid, 'Resources')
 
 	def add_file_to_phase(self, name, guid, phase_guid, phase):
 		project_data = self.get_project_data()
@@ -585,18 +595,17 @@ class pbxproj(object):
 		match = re.search(re.escape(phase_guid)+" \/\* "+re.escape(phase)+" \*\/ = {(?:.|\n)+?files = \(((?:.|\n)+?)\);", project_data)
 
 		if not match:
-			logging.error("Couldn't find the "+phase+" phase.")
+			logging.error(f"Couldn't find the {phase} phase.")
 			return False
 
 		(files, ) = match.groups()
 
-		match = re.search(re.escape(guid), files)
-		if match:
+		if match := re.search(re.escape(guid), files):
 			logging.info("The file has already been added.")
 		else:
 			match = re.search(re.escape(phase_guid)+" \/\* "+phase+" \*\/ = {(?:.|\n)+?files = \(\n", project_data)
 			if not match:
-				logging.error("Couldn't find the "+phase+" files")
+				logging.error(f"Couldn't find the {phase} files")
 				return False
 
 			frameworktext = "\t\t\t\t"+guid+" /* "+name+" in "+phase+" */,\n"
@@ -663,14 +672,9 @@ class pbxproj(object):
 
 		(build_settings, ) = match.groups()
 
-		match = re.search(re.escape(setting_name)+' = ((?:.|\n)+?);', build_settings)
-
-		if not match:
-			# Add a brand new build setting. No checking for existing settings necessary.
-			settingtext = '\t\t\t\t'+setting_name+' = '+value+';\n'
-
-			project_data = project_data[:settings_start] + settingtext + project_data[settings_start:]
-		else:
+		if match := re.search(
+			re.escape(setting_name) + ' = ((?:.|\n)+?);', build_settings
+		):
 			# Build settings already exist. Is there one or many?
 			(search_paths,) = match.groups()
 			if re.search('\(\n', search_paths):
@@ -681,19 +685,22 @@ class pbxproj(object):
 					# multiple entries.
 					escaped_value = re.escape(value).replace(' ', '",\n[ \t]+"')
 					match = re.search(escaped_value, search_paths)
-					if not match and not re.search(re.escape(value.strip('"')), search_paths):
-						match = re.search(re.escape(setting_name)+' = \(\n', build_settings)
+				if not match and not re.search(re.escape(value.strip('"')), search_paths):
+					match = re.search(re.escape(setting_name)+' = \(\n', build_settings)
 
-						build_settings = build_settings[:match.end()] + '\t\t\t\t\t'+value+',\n' + build_settings[match.end():]
-						project_data = project_data[:settings_start] + build_settings + project_data[settings_end:]
-			else:
-				# One
-				if search_paths.strip('"') != value.strip('"'):
-					existing_path = search_paths
-					path_set = '(\n\t\t\t\t\t'+value+',\n\t\t\t\t\t'+existing_path+'\n\t\t\t\t)'
-					build_settings = build_settings[:match.start(1)] + path_set + build_settings[match.end(1):]
+					build_settings = build_settings[:match.end()] + '\t\t\t\t\t'+value+',\n' + build_settings[match.end():]
 					project_data = project_data[:settings_start] + build_settings + project_data[settings_end:]
+			elif search_paths.strip('"') != value.strip('"'):
+				existing_path = search_paths
+				path_set = '(\n\t\t\t\t\t'+value+',\n\t\t\t\t\t'+existing_path+'\n\t\t\t\t)'
+				build_settings = build_settings[:match.start(1)] + path_set + build_settings[match.end(1):]
+				project_data = project_data[:settings_start] + build_settings + project_data[settings_end:]
 
+		else:
+			# Add a brand new build setting. No checking for existing settings necessary.
+			settingtext = '\t\t\t\t'+setting_name+' = '+value+';\n'
+
+			project_data = project_data[:settings_start] + settingtext + project_data[settings_start:]
 		self.set_project_data(project_data)
 
 		return True
@@ -702,20 +709,23 @@ class pbxproj(object):
 		examplehash = '320FFFEEEDDDCCCBBBAAA000'
 		uniquehash = hashlib.sha224(uniquename).hexdigest().upper()
 		uniquehash = uniquehash[:len(examplehash) - 4]
-		return '320'+uniquehash
+		return f'320{uniquehash}'
 
 	def add_framework(self, framework):
 		tthash_base = self.get_hash_base(framework)
-		
-		fileref_hash = self.add_filereference(framework, 'frameworks', tthash_base+'0', 'System/Library/Frameworks/'+framework, 'SDKROOT')
-		libfile_hash = self.add_buildfile(framework, fileref_hash, tthash_base+'1')
+
+		fileref_hash = self.add_filereference(
+			framework,
+			'frameworks',
+			f'{tthash_base}0',
+			f'System/Library/Frameworks/{framework}',
+			'SDKROOT',
+		)
+		libfile_hash = self.add_buildfile(framework, fileref_hash, f'{tthash_base}1')
 		if not self.add_file_to_frameworks(framework, fileref_hash):
 			return False
-		
-		if not self.add_file_to_frameworks_phase(framework, libfile_hash):
-			return False
-		
-		return True
+
+		return bool(self.add_file_to_frameworks_phase(framework, libfile_hash))
 
 	def add_bundle(self):
 		tthash_base = self.get_hash_base('Three20.bundle')
@@ -723,18 +733,19 @@ class pbxproj(object):
 		project_path = os.path.dirname(os.path.abspath(self.xcodeprojpath()))
 		build_path = os.path.join(Paths.src_dir, 'Three20.bundle')
 		rel_path = relpath(project_path, build_path)
-		
-		fileref_hash = self.add_filereference('Three20.bundle', 'plug-in', tthash_base+'0', rel_path, 'SOURCE_ROOT')
 
-		libfile_hash = self.add_buildfile('Three20.bundle', fileref_hash, tthash_base+'1')
+		fileref_hash = self.add_filereference(
+			'Three20.bundle', 'plug-in', f'{tthash_base}0', rel_path, 'SOURCE_ROOT'
+		)
+
+		libfile_hash = self.add_buildfile(
+			'Three20.bundle', fileref_hash, f'{tthash_base}1'
+		)
 
 		if not self.add_file_to_resources('Three20.bundle', fileref_hash):
 			return False
 
-		if not self.add_file_to_resources_phase('Three20.bundle', libfile_hash):
-			return False
-
-		return True
+		return bool(self.add_file_to_resources_phase('Three20.bundle', libfile_hash))
 
 	# Get the PBXFileReference from the given PBXBuildFile guid.
 	def get_filerefguid_from_buildfileguid(self, buildfileguid):

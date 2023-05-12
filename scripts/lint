@@ -172,31 +172,28 @@ def lint_project(project_path, options):
 # Lint the given filename.
 def lint(filename, options):
 	logger = logging.getLogger()
-	
+
 	f = FilenameFilter()
 	logger.addFilter(f)
 
 	# Set up the warning logger format.
 	ch = logging.StreamHandler()
 	if 'PROJECT_FILE_PATH' in os.environ:
-		formatter = logging.Formatter(filename+":%(linenumber)s: warning: "+relpath(os.getcwd(), filename)+":%(linenumber)s: %(message)s")
+		formatter = logging.Formatter(
+			f"{filename}:%(linenumber)s: warning: {relpath(os.getcwd(), filename)}:%(linenumber)s: %(message)s"
+		)
 	else:
-		formatter = logging.Formatter(filename+":%(linenumber)s: %(message)s")
+		formatter = logging.Formatter(f"{filename}:%(linenumber)s: %(message)s")
 	ch.setFormatter(formatter)
 	logger.addHandler(ch)
 
 	file = open(filename, 'r')
 	filedata = file.read()
-	
-	did_lint_cleanly = True
-	
-	# Everything is set up now, let's run through the linters!
-	if not lint_basics(filedata, filename, f, options.delint):
-		did_lint_cleanly = False
 
+	did_lint_cleanly = bool(lint_basics(filedata, filename, f, options.delint))
 	logger.removeFilter(f)
 	logger.removeHandler(ch)
-	
+
 	return did_lint_cleanly
 	
 
@@ -210,20 +207,20 @@ def lint_basics(filedata, filename, linenofilter, isdelinting = False):
 	linenofilter.lineno = 1
 
 	prevline = None
-	
+
 	did_lint_cleanly = True
-	
+
 	nwarningsfixed = 0
 	nwarnings = 0
 	if isdelinting:
 		newfilelines = []
-	
+
 	for line in lines:
 		# Check line lengths.
 		if len(line) > 100:
 			did_lint_cleanly = False
 			nwarnings = nwarnings + 1
-			
+
 			# This is not something we can fix with the delinter.
 			if isdelinting:
 				logger.error('I don\'t know how to split this line up.')
@@ -231,19 +228,22 @@ def lint_basics(filedata, filename, linenofilter, isdelinting = False):
 				logger.error('Line length > 100')
 
 		# Check method dividers.
-		if not re.search(r'.h$', filename) and re.search(r'^[-+][ ]*\([\w\s*]+\)', line):
-			if prevline != gdivider and prevline != ' */':
-				did_lint_cleanly = False
-				nwarnings = nwarnings + 1
-			
-				# This is not something we can fix with the delinter.
-				if isdelinting:
-					if re.match(r'/+', prevline):
-						newfilelines.pop()
-					newfilelines.append(gdivider)
-					nwarningsfixed = nwarningsfixed + 1
-				else:
-					logger.error('This method is missing a correct divider before it')
+		if (
+			not re.search(r'.h$', filename)
+			and re.search(r'^[-+][ ]*\([\w\s*]+\)', line)
+			and prevline not in [gdivider, ' */']
+		):
+			did_lint_cleanly = False
+			nwarnings = nwarnings + 1
+
+			# This is not something we can fix with the delinter.
+			if isdelinting:
+				if re.match(r'/+', prevline):
+					newfilelines.pop()
+				newfilelines.append(gdivider)
+				nwarningsfixed = nwarningsfixed + 1
+			else:
+				logger.error('This method is missing a correct divider before it')
 
 		# Properties
 		if re.search(r'^@property', line):
@@ -255,7 +255,7 @@ def lint_basics(filedata, filename, linenofilter, isdelinting = False):
 				else:
 					did_lint_cleanly = False
 					logger.error('Objects that have mutable subclasses, such as NSString, should be copied, not retained')
-				
+
 			if re.search(r'^@property\(', line):
 				nwarnings = nwarnings + 1
 				if isdelinting:
@@ -301,9 +301,9 @@ def lint_basics(filedata, filename, linenofilter, isdelinting = False):
 				did_lint_cleanly = False
 				logger.error('There must be one empty line before an else statement')
 
-		# Copyright statement for Facebook
-		match = re.match('\/\/ Copyright ([0-9]+-[0-9]+) Facebook', line, re.IGNORECASE)
-		if match:
+		if match := re.match(
+			'\/\/ Copyright ([0-9]+-[0-9]+) Facebook', line, re.IGNORECASE
+		):
 			(copyrightyears, ) = match.groups()
 			if copyrightyears != gcopyrightyears:
 				nwarnings = nwarnings + 1
